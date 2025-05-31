@@ -29,7 +29,7 @@ import { ResponseInterceptor } from './ResponseInterceptor';
         password: configService.get('database.password'),
         database: configService.get('database.database'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
       }),
       inject: [ConfigService],
     }),
