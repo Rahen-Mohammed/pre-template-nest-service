@@ -92,6 +92,205 @@ Migrations are version control for your database schema. They allow you to modif
    npm run migration:revert
    ```
 
+### Understanding Migration Generation
+
+#### When to Use `migration:generate`
+
+You should run `npm run migration:generate` whenever you make changes to your **entity files** that affect the database schema. This includes:
+
+**🔄 Entity Modifications That Require Migrations:**
+
+- **Adding new columns** to existing entities
+- **Removing columns** from entities
+- **Changing column types** (string to number, etc.)
+- **Adding or removing indexes**
+- **Modifying column constraints** (nullable, unique, etc.)
+- **Adding new entities** (new tables)
+- **Removing entities** (dropping tables)
+- **Changing relationships** between entities
+- **Renaming columns or tables**
+
+#### Migration Generation Workflow
+
+**Step 1: Modify Your Entity**
+
+```typescript
+// Example: Adding a new field to User entity
+@Entity('users')
+export class User {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column()
+  email: string;
+
+  @Column()
+  password: string;
+
+  // ✅ NEW FIELD ADDED
+  @Column({ nullable: true })
+  phone: string;
+
+  // ✅ NEW FIELD ADDED
+  @CreateDateColumn()
+  created_at: Date;
+}
+```
+
+**Step 2: Generate Migration**
+
+```bash
+# Generate migration with a descriptive name
+npm run migration:generate -- src/migrations/AddPhoneAndCreatedAtToUsers
+```
+
+**Step 3: Review Generated Migration**
+TypeORM will automatically generate a migration file like:
+
+```typescript
+// src/migrations/1234567890123-AddPhoneAndCreatedAtToUsers.ts
+export class AddPhoneAndCreatedAtToUsers1234567890123
+  implements MigrationInterface
+{
+  name = 'AddPhoneAndCreatedAtToUsers1234567890123';
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`users\` ADD \`phone\` varchar(255) NULL`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE \`users\` ADD \`created_at\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)`,
+    );
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`ALTER TABLE \`users\` DROP COLUMN \`created_at\``);
+    await queryRunner.query(`ALTER TABLE \`users\` DROP COLUMN \`phone\``);
+  }
+}
+```
+
+**Step 4: Run the Migration**
+
+```bash
+npm run migration:run
+```
+
+#### Complete Example: Adding a New Entity
+
+**1. Create a new entity file:**
+
+```typescript
+// src/categories/entities/category.entity.ts
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Todo } from '../../todos/entities/todo.entity';
+
+@Entity('categories')
+export class Category {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column()
+  name: string;
+
+  @Column({ nullable: true })
+  description: string;
+
+  @OneToMany(() => Todo, (todo) => todo.category)
+  todos: Todo[];
+}
+```
+
+**2. Update existing entity to add relationship:**
+
+```typescript
+// src/todos/entities/todo.entity.ts
+@Entity('todos')
+export class Todo {
+  // ... existing fields
+
+  // ✅ ADD RELATIONSHIP
+  @ManyToOne(() => Category, (category) => category.todos)
+  @JoinColumn({ name: 'category_id' })
+  category: Category;
+
+  @Column({ nullable: true })
+  category_id: number;
+}
+```
+
+**3. Generate migration:**
+
+```bash
+npm run migration:generate -- src/migrations/AddCategoryEntityAndRelation
+```
+
+**4. Run migration:**
+
+```bash
+npm run migration:run
+```
+
+#### Migration Best Practices
+
+**✅ DO:**
+
+- **Use descriptive names** for migrations: `AddUserPhoneField`, `CreateCategoryTable`
+- **Review generated migrations** before running them
+- **Test migrations** in development first
+- **Backup database** before running migrations in production
+- **Run migrations** in the correct order (oldest first)
+
+**❌ DON'T:**
+
+- **Edit existing migrations** that have been run in production
+- **Delete migration files** that have been applied
+- **Skip migration generation** when changing entities
+- **Run migrations directly in production** without testing
+
+#### Migration Commands Reference
+
+```bash
+# Generate migration after entity changes
+npm run migration:generate -- src/migrations/DescriptiveName
+
+# Run all pending migrations
+npm run migration:run
+
+# Revert the last migration
+npm run migration:revert
+
+# Show migration status
+npm run migration:show
+
+# Create empty migration file (for custom SQL)
+npm run migration:create -- src/migrations/CustomMigrationName
+```
+
+#### Troubleshooting Migrations
+
+**🔴 "No changes in database schema were found"**
+
+- Ensure your entities are properly imported in the module
+- Check that TypeORM can detect your entity files
+- Verify database connection is working
+
+**🔴 Migration fails to run**
+
+- Check database permissions
+- Ensure database exists
+- Review migration SQL for syntax errors
+- Check for conflicting constraints
+
+**🔴 Entity changes not detected**
+
+- Restart the application
+- Check entity file syntax
+- Ensure entity is exported and imported correctly
+
 ### Current Migration
 
 The project includes a migration (`1748675584027-schema-update.ts`) that creates:
@@ -685,20 +884,67 @@ lsof -ti:3000 | xargs kill -9
    - The app runs with hot reload in development mode
    - Changes to TypeScript files will automatically restart the server
 
-2. **Database Changes**
+2. **Database Changes & Entity Modifications**
+
+   **When you modify entities, follow this workflow:**
 
    ```bash
-   # After modifying entities, generate a new migration
-   npm run migration:generate -- src/migrations/YourChangeName
+   # Step 1: Make changes to your entity files
+   # (Add/remove fields, change types, add relationships, etc.)
 
-   # Run the new migration
+   # Step 2: Generate migration to capture the changes
+   npm run migration:generate -- src/migrations/DescriptiveNameForYourChanges
+
+   # Step 3: Review the generated migration file
+   # Check the SQL commands in the migration file
+
+   # Step 4: Run the migration to apply changes to database
+   npm run migration:run
+
+   # Step 5: Test your changes
+   npm run start:dev
+   ```
+
+   **Example workflow for adding a new field:**
+
+   ```typescript
+   // 1. Modify your entity (e.g., src/users/entities/user.entity.ts)
+   @Entity('users')
+   export class User {
+     // ... existing fields
+
+     @Column({ nullable: true }) // ✅ NEW FIELD
+     phone: string;
+   }
+   ```
+
+   ```bash
+   # 2. Generate migration
+   npm run migration:generate -- src/migrations/AddPhoneToUsers
+
+   # 3. Run migration
    npm run migration:run
    ```
 
 3. **Adding New Features**
+
    - Create new modules: `nest generate module feature-name`
    - Create new controllers: `nest generate controller feature-name`
    - Create new services: `nest generate service feature-name`
+
+   **If your new feature includes entities:**
+
+   ```bash
+   # 1. Generate the feature
+   nest generate resource feature-name
+
+   # 2. Modify the generated entity as needed
+   # 3. Generate migration for the new entity
+   npm run migration:generate -- src/migrations/CreateFeatureNameTable
+
+   # 4. Run migration
+   npm run migration:run
+   ```
 
 ## 📁 Project Structure
 
